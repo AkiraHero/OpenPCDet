@@ -38,6 +38,8 @@ def parse_config():
     parser.add_argument('--ckpt_dir', type=str, default=None, help='specify a ckpt directory to be evaluated if needed')
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
     parser.add_argument('--enable_dropout', action='store_true', default=False, help='enable dropout in evaluation')
+    parser.add_argument('--dropout_eval_iter', type=int, default=100,
+                        help='iteration time of repeating evaluation with dropout')
 
     args = parser.parse_args()
 
@@ -154,6 +156,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     eval_output_dir = output_dir / 'eval'
+    if args.enable_dropout:
+        eval_output_dir = output_dir / 'eval_dropout'
 
     if not args.eval_all:
         num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
@@ -195,9 +199,16 @@ def main():
             repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test,
                              enable_dropout=args.enable_dropout)
         else:
-            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test,
-                             enable_dropout=args.enable_dropout)
-
+            if not args.enable_dropout:
+                eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test,
+                                 enable_dropout=args.enable_dropout)
+            else:
+                for i in range(args.dropout_eval_iter):
+                    time_str = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+                    cur_eval_output_dir = eval_output_dir / ("dropout-iter-" + str(i) + "-" + time_str)
+                    cur_eval_output_dir.mkdir(parents=True, exist_ok=True)
+                    eval_single_ckpt(model, test_loader, args, cur_eval_output_dir, logger, epoch_id, dist_test=dist_test,
+                                     enable_dropout=args.enable_dropout)
 
 if __name__ == '__main__':
     main()
